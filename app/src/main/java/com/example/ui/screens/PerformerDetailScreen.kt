@@ -78,6 +78,7 @@ import coil.request.ImageRequest
 import com.example.R
 import com.example.domain.model.Performer
 import com.example.domain.model.VideoLink
+import com.example.ui.components.ImageDataCodec
 import com.example.ui.components.PerformerPortraitFrame
 import com.example.ui.components.TvConfirmDeleteDialog
 import com.example.ui.components.TvTextInputDialog
@@ -110,8 +111,8 @@ fun PerformerDetailScreen(
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onAddVideoLink: (title: String, url: String, thumbnailUrl: String?) -> Unit,
-    onUpdateVideoLink: (linkId: Long, title: String, url: String, thumbnailUrl: String?) -> Unit,
-    onDeleteVideoLink: (linkId: Long) -> Unit,
+    onUpdateVideoLink: (linkId: String, title: String, url: String, thumbnailUrl: String?) -> Unit,
+    onDeleteVideoLink: (linkId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onBack)
@@ -136,7 +137,8 @@ fun PerformerDetailScreen(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
             }
-            onUpdateImageUri(uri.toString())
+            val syncedDataUrl = ImageDataCodec.compressImageUriToDataUrl(context, uri)
+            onUpdateImageUri(syncedDataUrl ?: uri.toString())
             feedbackHint = null
         }
     }
@@ -612,10 +614,13 @@ private fun VideoThumbnailCard(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (videoLink.hasThumbnail) {
+                    val thumbModel = remember(videoLink.thumbnailUrl) {
+                        ImageDataCodec.toCoilModel(videoLink.thumbnailUrl)
+                    }
+                    if (thumbModel != null) {
                         SubcomposeAsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(videoLink.thumbnailUrl)
+                                .data(thumbModel)
                                 .size(480, 270)
                                 .crossfade(true)
                                 .build(),

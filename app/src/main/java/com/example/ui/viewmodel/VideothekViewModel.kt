@@ -1,13 +1,15 @@
 package com.example.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.repository.PerformerRepository
 import com.example.domain.model.AlphabetBucket
 import com.example.domain.model.Performer
 import com.example.domain.model.SortOrder
 import com.example.domain.model.VideoLink
+import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,7 +34,7 @@ sealed interface CatalogContentState {
 
 sealed interface ScreenDestination {
     data object Catalog : ScreenDestination
-    data class Detail(val performerId: Long) : ScreenDestination
+    data class Detail(val performerId: String) : ScreenDestination
 }
 
 data class VideothekUiState(
@@ -40,7 +42,7 @@ data class VideothekUiState(
     val destination: ScreenDestination = ScreenDestination.Catalog,
     val selectedPerformer: Performer? = null,
     val selectedPerformerVideoLinks: List<VideoLink> = emptyList(),
-    val lastFocusedPerformerId: Long? = null,
+    val lastFocusedPerformerId: String? = null,
     val sortOrder: SortOrder = SortOrder.ALPHA_ASC,
     val alphabetBucket: AlphabetBucket = AlphabetBucket.ALL,
     val searchQuery: String = "",
@@ -59,10 +61,11 @@ private data class FilterCriteria(
 @OptIn(ExperimentalCoroutinesApi::class)
 class VideothekViewModel(
     private val repository: PerformerRepository,
+    private val currentUserId: String,
 ) : ViewModel() {
 
     private val destinationState = MutableStateFlow<ScreenDestination>(ScreenDestination.Catalog)
-    private val lastFocusedIdState = MutableStateFlow<Long?>(null)
+    private val lastFocusedIdState = MutableStateFlow<String?>(null)
     private val filterCriteriaState = MutableStateFlow(
         FilterCriteria(
             sortOrder = SortOrder.ALPHA_ASC,
@@ -73,54 +76,79 @@ class VideothekViewModel(
     )
     private val showAddDialogState = MutableStateFlow(false)
     private val statusMessageState = MutableStateFlow<String?>(null)
-    private val seedErrorState = MutableStateFlow<String?>(null)
+    private val streamErrorState = MutableStateFlow<String?>(null)
+    private val hasReceivedSnapshotState = MutableStateFlow(false)
+
+    private val performersStream = repository.observeAllPerformers(currentUserId)
+        .catch { error ->
+            val firestoreError = generateSequence(error) { it.cause }
+                .filterIsInstance<FirebaseFirestoreException>()
+                .firstOrNull()
+            if (firestoreError == null && error is CancellationException) throw error
+            val rootError = firestoreError ?: error
+            Log.w(TAG, "Error observing performers", rootError)
+            streamErrorState.value = rootError.localizedMessage ?: "Cloud-Sync Fehler beim Laden."
+            emit(emptyList())
+        }
 
     private val selectedVideoLinksFlow = destinationState.flatMapLatest { destination ->
         when (destination) {
-            is ScreenDestination.Detail -> repository.observeVideoLinks(destination.performerId)
+            is ScreenDestination.Detail -> repository.observeVideoLinks(currentUserId, destination.performerId)
+                .catch { error ->
+                    val firestoreError = generateSequence(error) { it.cause }
+                        .filterIsInstance<FirebaseFirestoreException>()
+                        .firstOrNull()
+                    if (firestoreError == null && error is CancellationException) throw error
+                    val rootError = firestoreError ?: error
+                    Log.w(TAG, "Error observing video links", rootError)
+                    statusMessageState.value = rootError.localizedMessage ?: "Fehler beim Laden der Video-Links"
+                    emit(emptyList())
+                }
             ScreenDestination.Catalog -> flowOf(emptyList())
         }
     }
 
     val uiState: StateFlow<VideothekUiState> = combine(
-        repository.observeAllPerformers()
-            .catch { throwable ->
-                seedErrorState.value = throwable.localizedMessage ?: "Datenbankfehler beim Laden."
-                emit(emptyList())
-            },
+        performersStream,
         selectedVideoLinksFlow,
         destinationState,
         lastFocusedIdState,
         filterCriteriaState,
         showAddDialogState,
         statusMessageState,
-        seedErrorState,
+        streamErrorState,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val allPerformers = values[0] as List<Performer>
         @Suppress("UNCHECKED_CAST")
         val selectedLinks = values[1] as List<VideoLink>
         val destination = values[2] as ScreenDestination
-        val lastFocusedId = values[3] as Long?
+        val lastFocusedId = values[3] as String?
         val criteria = values[4] as FilterCriteria
         val showAddDialog = values[5] as Boolean
         val statusMessage = values[6] as String?
-        val seedError = values[7] as String?
+        val streamError = values[7] as String?
+
+        if (allPerformers.isNotEmpty()) {
+            hasReceivedSnapshotState.value = true
+        }
 
         val selectedPerformer = when (destination) {
             is ScreenDestination.Detail -> allPerformers.find { it.id == destination.performerId }
             ScreenDestination.Catalog -> null
         }
 
-        val contentState = if (seedError != null && allPerformers.isEmpty()) {
-            CatalogContentState.Error(seedError)
-        } else {
-            val filtered = applySortingAndFilters(allPerformers, criteria)
-            CatalogContentState.Ready(
-                performers = filtered,
-                totalCount = allPerformers.size,
-                totalVideoLinks = allPerformers.sumOf { it.videoCount },
-            )
+        val contentState = when {
+            streamError != null && allPerformers.isEmpty() -> CatalogContentState.Error(streamError)
+            !hasReceivedSnapshotState.value && allPerformers.isEmpty() -> CatalogContentState.Loading
+            else -> {
+                val filtered = applySortingAndFilters(allPerformers, criteria)
+                CatalogContentState.Ready(
+                    performers = filtered,
+                    totalCount = allPerformers.size,
+                    totalVideoLinks = allPerformers.sumOf { it.videoCount },
+                )
+            }
         }
 
         VideothekUiState(
@@ -148,16 +176,23 @@ class VideothekViewModel(
 
     fun initializeCatalog() {
         viewModelScope.launch {
-            seedErrorState.value = null
+            streamErrorState.value = null
             runCatching {
                 repository.ensureSeeded()
+                hasReceivedSnapshotState.value = true
             }.onFailure { throwable ->
-                seedErrorState.value = throwable.localizedMessage ?: "Initialisierung fehlgeschlagen."
+                val firestoreError = generateSequence(throwable) { it.cause }
+                    .filterIsInstance<FirebaseFirestoreException>()
+                    .firstOrNull()
+                if (firestoreError == null && throwable is CancellationException) throw throwable
+                val rootError = firestoreError ?: throwable
+                Log.w(TAG, "Error seeding catalog", rootError)
+                streamErrorState.value = rootError.localizedMessage ?: "Cloud-Initialisierung fehlgeschlagen."
             }
         }
     }
 
-    fun openPerformerDetail(performerId: Long) {
+    fun openPerformerDetail(performerId: String) {
         lastFocusedIdState.value = performerId
         destinationState.value = ScreenDestination.Detail(performerId)
     }
@@ -166,7 +201,7 @@ class VideothekViewModel(
         destinationState.value = ScreenDestination.Catalog
     }
 
-    fun updateLastFocusedPerformer(performerId: Long) {
+    fun updateLastFocusedPerformer(performerId: String) {
         lastFocusedIdState.value = performerId
     }
 
@@ -221,21 +256,21 @@ class VideothekViewModel(
                 val newId = repository.addPerformer(trimmed)
                 lastFocusedIdState.value = newId
                 showAddDialogState.value = false
-                statusMessageState.value = "$trimmed hinzugefügt"
+                statusMessageState.value = "$trimmed synchronisiert"
             }.onFailure { throwable ->
                 statusMessageState.value = throwable.localizedMessage ?: "Konnte nicht gespeichert werden"
             }
         }
     }
 
-    fun updatePerformerImage(id: Long, imageUri: String?) {
+    fun updatePerformerImage(id: String, imageUri: String?) {
         viewModelScope.launch {
             runCatching {
                 repository.updateImageUri(id = id, imageUri = imageUri)
                 statusMessageState.value = if (imageUri.isNullOrBlank()) {
                     "Bild entfernt"
                 } else {
-                    "Bild gespeichert"
+                    "Bild gespeichert & synchronisiert"
                 }
             }.onFailure { throwable ->
                 statusMessageState.value = throwable.localizedMessage ?: "Bild konnte nicht gespeichert werden"
@@ -243,28 +278,32 @@ class VideothekViewModel(
         }
     }
 
-    fun renamePerformer(id: Long, newName: String) {
+    fun renamePerformer(id: String, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             runCatching {
                 repository.renamePerformer(id = id, newName = trimmed)
                 statusMessageState.value = "Name aktualisiert"
+            }.onFailure { throwable ->
+                statusMessageState.value = throwable.localizedMessage ?: "Name konnte nicht geändert werden"
             }
         }
     }
 
-    fun deletePerformer(id: Long) {
+    fun deletePerformer(id: String) {
         viewModelScope.launch {
             runCatching {
                 repository.deletePerformer(id)
                 destinationState.value = ScreenDestination.Catalog
                 statusMessageState.value = "Eintrag gelöscht"
+            }.onFailure { throwable ->
+                statusMessageState.value = throwable.localizedMessage ?: "Löschen fehlgeschlagen"
             }
         }
     }
 
-    fun addVideoLink(performerId: Long, title: String, url: String, thumbnailUrl: String?) {
+    fun addVideoLink(performerId: String, title: String, url: String, thumbnailUrl: String?) {
         val trimmedUrl = url.trim()
         if (trimmedUrl.isEmpty()) return
         viewModelScope.launch {
@@ -275,14 +314,14 @@ class VideothekViewModel(
                     url = trimmedUrl,
                     thumbnailUrl = thumbnailUrl,
                 )
-                statusMessageState.value = "Video-Link gespeichert"
+                statusMessageState.value = "Video-Link synchronisiert"
             }.onFailure { throwable ->
                 statusMessageState.value = throwable.localizedMessage ?: "Link konnte nicht gespeichert werden"
             }
         }
     }
 
-    fun updateVideoLink(linkId: Long, title: String, url: String, thumbnailUrl: String?) {
+    fun updateVideoLink(linkId: String, title: String, url: String, thumbnailUrl: String?) {
         val trimmedUrl = url.trim()
         if (trimmedUrl.isEmpty()) return
         viewModelScope.launch {
@@ -294,15 +333,19 @@ class VideothekViewModel(
                     thumbnailUrl = thumbnailUrl,
                 )
                 statusMessageState.value = "Video-Link aktualisiert"
+            }.onFailure { throwable ->
+                statusMessageState.value = throwable.localizedMessage ?: "Link konnte nicht aktualisiert werden"
             }
         }
     }
 
-    fun deleteVideoLink(linkId: Long) {
+    fun deleteVideoLink(linkId: String) {
         viewModelScope.launch {
             runCatching {
                 repository.deleteVideoLink(linkId)
                 statusMessageState.value = "Video-Link entfernt"
+            }.onFailure { throwable ->
+                statusMessageState.value = throwable.localizedMessage ?: "Link konnte nicht gelöscht werden"
             }
         }
     }
@@ -334,15 +377,7 @@ class VideothekViewModel(
         }
     }
 
-    class Factory(
-        private val repository: PerformerRepository,
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(VideothekViewModel::class.java)) {
-                return VideothekViewModel(repository) as T
-            }
-            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
-        }
+    private companion object {
+        const val TAG = "VideothekVM"
     }
 }

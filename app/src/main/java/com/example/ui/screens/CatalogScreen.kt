@@ -74,8 +74,8 @@ import com.example.ui.viewmodel.VideothekUiState
 @Composable
 fun CatalogScreen(
     uiState: VideothekUiState,
-    onSelectPerformer: (Long) -> Unit,
-    onPerformerFocused: (Long) -> Unit,
+    onSelectPerformer: (String) -> Unit,
+    onPerformerFocused: (String) -> Unit,
     onCycleSortOrder: () -> Unit,
     onSelectSortOrder: (SortOrder) -> Unit,
     onSelectAlphabetBucket: (AlphabetBucket) -> Unit,
@@ -84,6 +84,7 @@ fun CatalogScreen(
     onOpenAddDialog: () -> Unit,
     onResetFilters: () -> Unit,
     onRetry: () -> Unit,
+    onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var focusedPerformer by remember { mutableStateOf<Performer?>(null) }
@@ -129,6 +130,7 @@ fun CatalogScreen(
                 onToggleSearch = onToggleSearch,
                 onSearchQueryChange = onSearchQueryChange,
                 onOpenAddDialog = onOpenAddDialog,
+                onSignOut = onSignOut,
             )
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -180,8 +182,8 @@ fun CatalogScreen(
 private fun PerformerGrid(
     performers: List<Performer>,
     columnCount: Int,
-    targetFocusPerformerId: Long?,
-    onSelectPerformer: (Long) -> Unit,
+    targetFocusPerformerId: String?,
+    onSelectPerformer: (String) -> Unit,
     onPerformerFocused: (Performer) -> Unit,
 ) {
     val gridState = rememberLazyGridState()

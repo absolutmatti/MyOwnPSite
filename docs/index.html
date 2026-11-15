@@ -19,11 +19,14 @@
         <span class="brand-dot" aria-hidden="true"></span>
         <div>
           <h1 class="brand-title">VIDEOTHEK</h1>
-          <p id="catalog-stats" class="brand-subtitle">50 Darstellerinnen • 0 Video-Links</p>
+          <p id="catalog-stats" class="brand-subtitle">Cloud-Sync wird initialisiert…</p>
         </div>
       </div>
 
-      <div class="topbar-actions">
+      <div id="topbar-actions" class="topbar-actions hidden">
+        <span id="sync-status-pill" class="sync-pill" title="Echtzeit-Synchronisierung mit Android TV">
+          ● Cloud-Sync
+        </span>
         <button id="btn-export" class="icon-btn" type="button" title="Katalog exportieren (JSON)" aria-label="Katalog exportieren">
           <span>Export</span>
         </button>
@@ -32,11 +35,28 @@
           <input id="input-import" type="file" accept="application/json" hidden />
         </label>
         <button id="btn-add-performer" class="primary-btn" type="button">+ Neu</button>
+        <button id="btn-sign-out" class="secondary-btn" type="button" title="Abmelden">Abmelden</button>
       </div>
     </header>
 
+    <!-- Auth Gate View -->
+    <main id="auth-view" class="auth-view">
+      <section class="auth-card">
+        <div class="auth-badge">Android TV ↔ Handy Sync</div>
+        <h2>Mit Google anmelden</h2>
+        <p class="auth-copy">
+          Melde dich mit demselben Google-Konto wie auf deinem Android TV an. Neue Darstellerinnen,
+          9:16-Bilder und Video-Links werden automatisch in Echtzeit auf beide Geräte übertragen.
+        </p>
+        <p id="auth-error" class="auth-error hidden" role="alert"></p>
+        <button id="btn-google-signin" class="primary-btn auth-btn" type="button">
+          Mit Google anmelden
+        </button>
+      </section>
+    </main>
+
     <!-- Catalog View -->
-    <main id="catalog-view" class="catalog-view">
+    <main id="catalog-view" class="catalog-view hidden">
       <section class="controls-bar" aria-label="Suche und Sortierung">
         <div class="search-wrap">
           <input
@@ -133,6 +153,6 @@
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

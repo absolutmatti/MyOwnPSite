@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidCatalogMeta(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.seeded is bool &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidPerformer(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             (!('imageUri' in data) || data.imageUri == null || (data.imageUri is string && data.imageUri.size() <= 250000)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidVideoLink(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             isValidId(data.performerId) &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 200 &&
+             data.url is string &&
+             data.url.size() >= 1 &&
+             data.url.size() <= 2000 &&
+             (!('thumbnailUrl' in data) || data.thumbnailUrl == null || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 250000)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    match /users/{userId}/meta/{metaId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(metaId);
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(metaId) &&
+                       incoming().keys().hasAll(['userId', 'seeded', 'createdAt']) &&
+                       incoming().keys().hasOnly(['userId', 'seeded', 'createdAt']) &&
+                       isValidCatalogMeta(incoming(), userId);
+
+      allow update, delete: if false;
+    }
+
+    match /users/{userId}/performers/{performerId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(performerId);
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(performerId) &&
+                       incoming().keys().hasAll(['userId', 'name', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'name', 'imageUri', 'createdAt', 'updatedAt']) &&
+                       isValidPerformer(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(performerId) &&
+                       isValidPerformer(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'imageUri', 'updatedAt']);
+
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(performerId);
+    }
+
+    match /users/{userId}/video_links/{linkId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(linkId);
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(linkId) &&
+                       incoming().keys().hasAll(['userId', 'performerId', 'title', 'url', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'performerId', 'title', 'url', 'thumbnailUrl', 'createdAt', 'updatedAt']) &&
+                       isValidVideoLink(incoming(), userId) &&
+                       existsAfter(/databases/$(database)/documents/users/$(userId)/performers/$(incoming().performerId));
+
+      allow update: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(linkId) &&
+                       isValidVideoLink(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().performerId == existing().performerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'url', 'thumbnailUrl', 'updatedAt']);
+
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(linkId);
+    }
+  }
+}

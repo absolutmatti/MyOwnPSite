@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "CatalogMeta": {
+      "title": "CatalogMeta",
+      "description": "Tracks one-time initial performer catalog seeding per user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "seeded": {
+          "type": "boolean",
+          "description": "True once the initial 50 performers have been seeded."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["userId", "seeded", "createdAt"]
+    },
+    "Performer": {
+      "title": "Performer",
+      "description": "A performer card in the user's Videothek catalog.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Performer display name."
+        },
+        "imageUri": {
+          "type": "string",
+          "description": "Optional portrait image URL or compressed data URI for the 9:16 tile."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["userId", "name", "createdAt", "updatedAt"]
+    },
+    "VideoLink": {
+      "title": "VideoLink",
+      "description": "A saved external video link with title and optional 16:9 thumbnail URL belonging to a performer.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "performerId": {
+          "type": "string",
+          "description": "Document ID of the parent performer under users/{userId}/performers."
+        },
+        "title": {
+          "type": "string",
+          "description": "Video display title."
+        },
+        "url": {
+          "type": "string",
+          "description": "External video URL."
+        },
+        "thumbnailUrl": {
+          "type": "string",
+          "description": "Optional 16:9 thumbnail URL or compressed data URI."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["userId", "performerId", "title", "url", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/meta/{metaId}": {
+      "schema": { "$ref": "#/entities/CatalogMeta" },
+      "description": "Per-user catalog initialization metadata."
+    },
+    "/users/{userId}/performers/{performerId}": {
+      "schema": { "$ref": "#/entities/Performer" },
+      "description": "Per-user collection of performers synced across Android TV and Web."
+    },
+    "/users/{userId}/video_links/{linkId}": {
+      "schema": { "$ref": "#/entities/VideoLink" },
+      "description": "Per-user collection of video links linked to performers via performerId."
+    }
+  }
+}

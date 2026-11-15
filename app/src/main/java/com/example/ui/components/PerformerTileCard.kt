@@ -148,10 +148,13 @@ fun PerformerPortraitFrame(
             )
         )
     ) {
-        if (performer.hasImage) {
+        val imageModel = remember(performer.imageUri) {
+            ImageDataCodec.toCoilModel(performer.imageUri)
+        }
+        if (imageModel != null) {
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(performer.imageUri)
+                    .data(imageModel)
                     .size(360, 640)
                     .crossfade(true)
                     .build(),

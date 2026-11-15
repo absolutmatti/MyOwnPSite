@@ -1,11 +1,11 @@
 package com.example.domain.model
 
 data class Performer(
-    val id: Long,
-    val name: String,
-    val imageUri: String?,
-    val videoCount: Int,
-    val createdAt: Long,
+    val id: String = "",
+    val name: String = "",
+    val imageUri: String? = null,
+    val videoCount: Int = 0,
+    val createdAt: Long = 0L,
 ) {
     val hasImage: Boolean
         get() = !imageUri.isNullOrBlank()

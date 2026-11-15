@@ -31,4 +31,10 @@
     <string name="empty_state_subtitle">Filter zurücksetzen oder Suche anpassen.</string>
     <string name="reset_filters">Filter zurücksetzen</string>
     <string name="retry">Erneut versuchen</string>
+    <string name="auth_title">Videothek Cloud-Sync</string>
+    <string name="auth_subtitle">Melde dich mit deinem Google-Konto an, um deine Darstellerinnen und Video-Links automatisch zwischen Android TV und Handy (Web-App) zu synchronisieren.</string>
+    <string name="auth_google_sign_in">Mit Google anmelden</string>
+    <string name="auth_signing_in">Anmeldung läuft…</string>
+    <string name="auth_sign_out">Abmelden</string>
+    <string name="auth_sync_badge">Cloud-Sync aktiv</string>
 </resources>

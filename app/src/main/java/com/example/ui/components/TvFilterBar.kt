@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -79,6 +80,7 @@ fun TvCatalogHeader(
     onToggleSearch: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onOpenAddDialog: () -> Unit,
+    onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -180,6 +182,24 @@ fun TvCatalogHeader(
                     Text(
                         text = stringResource(R.string.action_add_performer),
                         style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+
+                IconButton(
+                    onClick = onSignOut,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("sign_out_button"),
+                    colors = IconButtonDefaults.colors(
+                        containerColor = CardSurfaceElevated,
+                        contentColor = TextSecondary,
+                        focusedContainerColor = CinemaGold,
+                        focusedContentColor = ObsidianBackground,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = stringResource(R.string.auth_sign_out),
                     )
                 }
             }
