@@ -14,8 +14,8 @@ interface VideoLinkDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(link: VideoLinkEntity): Long
 
-    @Query("UPDATE video_links SET title = :title, url = :url WHERE id = :id")
-    suspend fun update(id: Long, title: String, url: String)
+    @Query("UPDATE video_links SET title = :title, url = :url, thumbnailUrl = :thumbnailUrl WHERE id = :id")
+    suspend fun update(id: Long, title: String, url: String, thumbnailUrl: String?)
 
     @Query("DELETE FROM video_links WHERE id = :id")
     suspend fun deleteById(id: Long)

@@ -23,6 +23,7 @@ data class VideoLinkEntity(
     val performerId: Long,
     val title: String,
     val url: String,
+    val thumbnailUrl: String? = null,
     val addedAt: Long = System.currentTimeMillis(),
 ) {
     fun toDomain(): VideoLink = VideoLink(
@@ -30,6 +31,7 @@ data class VideoLinkEntity(
         performerId = performerId,
         title = title,
         url = url,
+        thumbnailUrl = thumbnailUrl,
         addedAt = addedAt,
     )
 }

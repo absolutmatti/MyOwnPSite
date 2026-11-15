@@ -264,12 +264,17 @@ class VideothekViewModel(
         }
     }
 
-    fun addVideoLink(performerId: Long, title: String, url: String) {
+    fun addVideoLink(performerId: Long, title: String, url: String, thumbnailUrl: String?) {
         val trimmedUrl = url.trim()
         if (trimmedUrl.isEmpty()) return
         viewModelScope.launch {
             runCatching {
-                repository.addVideoLink(performerId = performerId, title = title, url = trimmedUrl)
+                repository.addVideoLink(
+                    performerId = performerId,
+                    title = title,
+                    url = trimmedUrl,
+                    thumbnailUrl = thumbnailUrl,
+                )
                 statusMessageState.value = "Video-Link gespeichert"
             }.onFailure { throwable ->
                 statusMessageState.value = throwable.localizedMessage ?: "Link konnte nicht gespeichert werden"
@@ -277,12 +282,17 @@ class VideothekViewModel(
         }
     }
 
-    fun updateVideoLink(linkId: Long, title: String, url: String) {
+    fun updateVideoLink(linkId: Long, title: String, url: String, thumbnailUrl: String?) {
         val trimmedUrl = url.trim()
         if (trimmedUrl.isEmpty()) return
         viewModelScope.launch {
             runCatching {
-                repository.updateVideoLink(linkId = linkId, title = title, url = trimmedUrl)
+                repository.updateVideoLink(
+                    linkId = linkId,
+                    title = title,
+                    url = trimmedUrl,
+                    thumbnailUrl = thumbnailUrl,
+                )
                 statusMessageState.value = "Video-Link aktualisiert"
             }
         }

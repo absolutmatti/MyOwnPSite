@@ -5,5 +5,9 @@ data class VideoLink(
     val performerId: Long,
     val title: String,
     val url: String,
+    val thumbnailUrl: String?,
     val addedAt: Long,
-)
+) {
+    val hasThumbnail: Boolean
+        get() = !thumbnailUrl.isNullOrBlank()
+}

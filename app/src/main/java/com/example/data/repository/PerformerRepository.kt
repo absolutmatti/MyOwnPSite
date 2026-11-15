@@ -67,25 +67,43 @@ class PerformerRepository(
         performerDao.deleteById(id)
     }
 
-    suspend fun addVideoLink(performerId: Long, title: String, url: String): Long {
+    suspend fun addVideoLink(
+        performerId: Long,
+        title: String,
+        url: String,
+        thumbnailUrl: String?,
+    ): Long {
         val normalizedUrl = url.trim()
         require(normalizedUrl.isNotEmpty()) { "Video-Link darf nicht leer sein" }
         val resolvedTitle = title.trim().ifEmpty { deriveTitleFromUrl(normalizedUrl) }
+        val normalizedThumb = thumbnailUrl?.trim()?.takeIf { it.isNotEmpty() }
         return videoLinkDao.insert(
             VideoLinkEntity(
                 performerId = performerId,
                 title = resolvedTitle,
                 url = normalizedUrl,
+                thumbnailUrl = normalizedThumb,
                 addedAt = System.currentTimeMillis(),
             )
         )
     }
 
-    suspend fun updateVideoLink(linkId: Long, title: String, url: String) {
+    suspend fun updateVideoLink(
+        linkId: Long,
+        title: String,
+        url: String,
+        thumbnailUrl: String?,
+    ) {
         val normalizedUrl = url.trim()
         require(normalizedUrl.isNotEmpty()) { "Video-Link darf nicht leer sein" }
         val resolvedTitle = title.trim().ifEmpty { deriveTitleFromUrl(normalizedUrl) }
-        videoLinkDao.update(id = linkId, title = resolvedTitle, url = normalizedUrl)
+        val normalizedThumb = thumbnailUrl?.trim()?.takeIf { it.isNotEmpty() }
+        videoLinkDao.update(
+            id = linkId,
+            title = resolvedTitle,
+            url = normalizedUrl,
+            thumbnailUrl = normalizedThumb,
+        )
     }
 
     suspend fun deleteVideoLink(linkId: Long) {

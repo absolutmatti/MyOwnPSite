@@ -96,8 +96,8 @@ class MainActivity : ComponentActivity() {
                                         onDelete = {
                                             viewModel.deletePerformer(performer.id)
                                         },
-                                        onAddVideoLink = { title, url ->
-                                            viewModel.addVideoLink(performer.id, title, url)
+                                        onAddVideoLink = { title, url, thumbnailUrl ->
+                                            viewModel.addVideoLink(performer.id, title, url, thumbnailUrl)
                                         },
                                         onUpdateVideoLink = viewModel::updateVideoLink,
                                         onDeleteVideoLink = viewModel::deleteVideoLink,

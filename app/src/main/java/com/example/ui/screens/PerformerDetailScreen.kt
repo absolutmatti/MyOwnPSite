@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,21 +50,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Glow
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.R
 import com.example.domain.model.Performer
 import com.example.domain.model.VideoLink
@@ -70,15 +83,20 @@ import com.example.ui.components.TvConfirmDeleteDialog
 import com.example.ui.components.TvTextInputDialog
 import com.example.ui.components.TvVideoLinkDialog
 import com.example.ui.theme.BorderSubtle
+import com.example.ui.theme.CardEmptyGradientBottom
+import com.example.ui.theme.CardEmptyGradientTop
 import com.example.ui.theme.CardSurface
 import com.example.ui.theme.CardSurfaceElevated
 import com.example.ui.theme.CinemaAmberLight
 import com.example.ui.theme.CinemaGold
 import com.example.ui.theme.CinemaGoldContainer
+import com.example.ui.theme.CinemaGoldGlow
 import com.example.ui.theme.DangerRed
 import com.example.ui.theme.DangerRedContainer
 import com.example.ui.theme.ObsidianBackground
 import com.example.ui.theme.ObsidianGradientTop
+import com.example.ui.theme.ScrimDark
+import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
@@ -91,8 +109,8 @@ fun PerformerDetailScreen(
     onUpdateImageUri: (String?) -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
-    onAddVideoLink: (title: String, url: String) -> Unit,
-    onUpdateVideoLink: (linkId: Long, title: String, url: String) -> Unit,
+    onAddVideoLink: (title: String, url: String, thumbnailUrl: String?) -> Unit,
+    onUpdateVideoLink: (linkId: Long, title: String, url: String, thumbnailUrl: String?) -> Unit,
     onDeleteVideoLink: (linkId: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -189,10 +207,11 @@ fun PerformerDetailScreen(
                         )
                     }
 
-                    // Right: Performer Metadata, Video-Links & Image Actions
+                    // Right: Performer Metadata, Video Thumbnails & Image Actions
                     DetailContentColumn(
                         performer = performer,
                         videoLinks = videoLinks,
+                        isWideLayout = true,
                         primaryActionFocusRequester = primaryActionFocusRequester,
                         feedbackHint = feedbackHint,
                         onBack = onBack,
@@ -244,6 +263,7 @@ fun PerformerDetailScreen(
                     DetailContentColumn(
                         performer = performer,
                         videoLinks = videoLinks,
+                        isWideLayout = false,
                         primaryActionFocusRequester = primaryActionFocusRequester,
                         feedbackHint = feedbackHint,
                         onBack = onBack,
@@ -275,9 +295,10 @@ fun PerformerDetailScreen(
             title = stringResource(R.string.dialog_video_link_add_title),
             initialTitle = "",
             initialUrl = "",
+            initialThumbnailUrl = "",
             confirmText = stringResource(R.string.dialog_confirm),
-            onConfirm = { title, url ->
-                onAddVideoLink(title, url)
+            onConfirm = { title, url, thumbnailUrl ->
+                onAddVideoLink(title, url, thumbnailUrl)
                 showAddVideoLinkDialog = false
             },
             onDismiss = { showAddVideoLinkDialog = false },
@@ -289,9 +310,10 @@ fun PerformerDetailScreen(
             title = stringResource(R.string.dialog_video_link_edit_title),
             initialTitle = currentLink.title,
             initialUrl = currentLink.url,
+            initialThumbnailUrl = currentLink.thumbnailUrl.orEmpty(),
             confirmText = stringResource(R.string.dialog_confirm),
-            onConfirm = { title, url ->
-                onUpdateVideoLink(currentLink.id, title, url)
+            onConfirm = { title, url, thumbnailUrl ->
+                onUpdateVideoLink(currentLink.id, title, url, thumbnailUrl)
                 editingVideoLink = null
             },
             onDismiss = { editingVideoLink = null },
@@ -343,6 +365,7 @@ fun PerformerDetailScreen(
 private fun DetailContentColumn(
     performer: Performer,
     videoLinks: List<VideoLink>,
+    isWideLayout: Boolean,
     primaryActionFocusRequester: FocusRequester,
     feedbackHint: String?,
     onBack: () -> Unit,
@@ -358,7 +381,7 @@ private fun DetailContentColumn(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.padding(bottom = 20.dp),
+        modifier = modifier.padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Button(
@@ -392,7 +415,7 @@ private fun DetailContentColumn(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusPill(
-                text = if (videoLinks.size == 1) "1 Video-Link" else "${videoLinks.size} Video-Links",
+                text = if (videoLinks.size == 1) "1 Video" else "${videoLinks.size} Videos",
                 highlighted = videoLinks.isNotEmpty(),
             )
             StatusPill(
@@ -413,7 +436,6 @@ private fun DetailContentColumn(
             )
         }
 
-        // Video-Links Section
         Spacer(modifier = Modifier.height(4.dp))
 
         DetailActionButton(
@@ -436,7 +458,7 @@ private fun DetailContentColumn(
         if (videoLinks.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
+                    .fillMaxWidth(0.95f)
                     .clip(RoundedCornerShape(12.dp))
                     .background(CardSurface)
                     .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
@@ -459,17 +481,29 @@ private fun DetailContentColumn(
                 }
             }
         } else {
+            val columns = if (isWideLayout) 2 else 1
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(0.92f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth(0.96f),
             ) {
-                videoLinks.forEach { link ->
-                    VideoLinkRow(
-                        videoLink = link,
-                        onOpen = { onOpenVideoLink(link) },
-                        onEdit = { onEditVideoLink(link) },
-                        onDelete = { onDeleteVideoLink(link) },
-                    )
+                videoLinks.chunked(columns).forEach { rowLinks ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        rowLinks.forEach { link ->
+                            VideoThumbnailCard(
+                                videoLink = link,
+                                onOpen = { onOpenVideoLink(link) },
+                                onEdit = { onEditVideoLink(link) },
+                                onDelete = { onDeleteVideoLink(link) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (columns == 2 && rowLinks.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -530,90 +564,230 @@ private fun DetailContentColumn(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun VideoLinkRow(
+private fun VideoThumbnailCard(
     videoLink: VideoLink,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(CardSurface)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-            .padding(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val context = LocalContext.current
+    var isFocused by remember { mutableStateOf(false) }
+    val cardShape = RoundedCornerShape(14.dp)
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Button(
+        Card(
             onClick = onOpen,
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
+                .onFocusChanged { isFocused = it.isFocused }
                 .testTag("open_video_link_${videoLink.id}"),
-            colors = ButtonDefaults.colors(
-                containerColor = CardSurfaceElevated,
-                contentColor = TextPrimary,
-                focusedContainerColor = CinemaGold,
-                focusedContentColor = ObsidianBackground,
+            shape = CardDefaults.shape(shape = cardShape),
+            colors = CardDefaults.colors(
+                containerColor = CardSurface,
+                focusedContainerColor = CardSurfaceElevated,
             ),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+            scale = CardDefaults.scale(focusedScale = 1.04f),
+            border = CardDefaults.border(
+                border = Border(BorderStroke(1.dp, BorderSubtle), shape = cardShape),
+                focusedBorder = Border(BorderStroke(2.5.dp, CinemaGold), shape = cardShape),
+            ),
+            glow = CardDefaults.glow(
+                focusedGlow = Glow(elevationColor = CinemaGoldGlow, elevation = 12.dp),
+            ),
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = videoLink.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = videoLink.url,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // 16:9 Video Thumbnail
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(CardEmptyGradientTop, CardEmptyGradientBottom)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (videoLink.hasThumbnail) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(videoLink.thumbnailUrl)
+                                .size(480, 270)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = videoLink.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                            loading = {
+                                VideoThumbnailPlaceholder(isFocused = isFocused)
+                            },
+                            error = {
+                                VideoThumbnailPlaceholder(isFocused = isFocused)
+                            },
+                        )
+                    } else {
+                        VideoThumbnailPlaceholder(isFocused = isFocused)
+                    }
+
+                    // Bottom gradient + Play badge
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, ScrimDark.copy(alpha = 0.72f))
+                                )
+                            )
+                            .padding(10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.align(Alignment.BottomStart),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isFocused) CinemaGold else ObsidianBackground.copy(alpha = 0.8f))
+                                    .border(1.dp, CinemaGold, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = null,
+                                    tint = if (isFocused) ObsidianBackground else CinemaGold,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            if (isFocused) {
+                                Text(
+                                    text = "Video öffnen",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = CinemaAmberLight,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Video Title & URL
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = videoLink.title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        color = if (isFocused) CinemaAmberLight else TextPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = videoLink.url,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 
-        IconButton(
-            onClick = onEdit,
-            modifier = Modifier
-                .size(48.dp)
-                .testTag("edit_video_link_${videoLink.id}"),
-            colors = IconButtonDefaults.colors(
-                containerColor = CardSurfaceElevated,
-                contentColor = TextPrimary,
-                focusedContainerColor = CinemaGold,
-                focusedContentColor = ObsidianBackground,
-            ),
+        // Edit & Delete Row for the video link
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Edit,
-                contentDescription = "Link bearbeiten",
-            )
-        }
+            IconButton(
+                onClick = onOpen,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("launch_video_link_${videoLink.id}"),
+                colors = IconButtonDefaults.colors(
+                    containerColor = CardSurfaceElevated,
+                    contentColor = TextPrimary,
+                    focusedContainerColor = CinemaGold,
+                    focusedContentColor = ObsidianBackground,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = "Video öffnen",
+                )
+            }
 
-        IconButton(
-            onClick = onDelete,
+            Spacer(modifier = Modifier.width(8.dp))
+
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("edit_video_link_${videoLink.id}"),
+                colors = IconButtonDefaults.colors(
+                    containerColor = CardSurfaceElevated,
+                    contentColor = TextPrimary,
+                    focusedContainerColor = CinemaGold,
+                    focusedContentColor = ObsidianBackground,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = "Link bearbeiten",
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("delete_video_link_${videoLink.id}"),
+                colors = IconButtonDefaults.colors(
+                    containerColor = DangerRedContainer,
+                    contentColor = DangerRed,
+                    focusedContainerColor = DangerRed,
+                    focusedContentColor = ObsidianBackground,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.DeleteOutline,
+                    contentDescription = "Link löschen",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoThumbnailPlaceholder(isFocused: Boolean) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
             modifier = Modifier
                 .size(48.dp)
-                .testTag("delete_video_link_${videoLink.id}"),
-            colors = IconButtonDefaults.colors(
-                containerColor = DangerRedContainer,
-                contentColor = DangerRed,
-                focusedContainerColor = DangerRed,
-                focusedContentColor = ObsidianBackground,
-            ),
+                .clip(CircleShape)
+                .background(if (isFocused) CinemaGoldContainer else CardSurfaceElevated)
+                .border(1.5.dp, if (isFocused) CinemaGold else BorderSubtle, CircleShape),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Filled.DeleteOutline,
-                contentDescription = "Link löschen",
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = if (isFocused) CinemaGold else TextSecondary,
+                modifier = Modifier.size(28.dp),
             )
         }
     }

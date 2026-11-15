@@ -153,16 +153,19 @@ fun TvVideoLinkDialog(
     title: String,
     initialTitle: String,
     initialUrl: String,
+    initialThumbnailUrl: String,
     confirmText: String,
-    onConfirm: (title: String, url: String) -> Unit,
+    onConfirm: (title: String, url: String, thumbnailUrl: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
 
     var titleValue by remember(initialTitle) { mutableStateOf(initialTitle) }
     var urlValue by remember(initialUrl) { mutableStateOf(initialUrl) }
+    var thumbnailValue by remember(initialThumbnailUrl) { mutableStateOf(initialThumbnailUrl) }
     var titleFocused by remember { mutableStateOf(false) }
     var urlFocused by remember { mutableStateOf(false) }
+    var thumbnailFocused by remember { mutableStateOf(false) }
     val urlFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -184,7 +187,7 @@ fun TvVideoLinkDialog(
                 .background(CardSurface)
                 .border(1.5.dp, BorderSubtle, RoundedCornerShape(20.dp))
                 .padding(28.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
                 text = title,
@@ -212,6 +215,15 @@ fun TvVideoLinkDialog(
                 modifier = Modifier.testTag("dialog_video_title_input"),
             )
 
+            DialogTextInputField(
+                label = stringResource(R.string.dialog_video_thumbnail_label),
+                value = thumbnailValue,
+                onValueChange = { thumbnailValue = it },
+                isFocused = thumbnailFocused,
+                onFocusChange = { thumbnailFocused = it },
+                modifier = Modifier.testTag("dialog_video_thumbnail_input"),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -237,7 +249,11 @@ fun TvVideoLinkDialog(
                     onClick = {
                         val trimmedUrl = urlValue.trim()
                         if (trimmedUrl.isNotEmpty()) {
-                            onConfirm(titleValue.trim(), trimmedUrl)
+                            onConfirm(
+                                titleValue.trim(),
+                                trimmedUrl,
+                                thumbnailValue.trim().takeIf { it.isNotEmpty() },
+                            )
                         }
                     },
                     modifier = Modifier.testTag("dialog_confirm_button"),
