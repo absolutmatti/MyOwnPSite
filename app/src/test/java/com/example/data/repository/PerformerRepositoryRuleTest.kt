@@ -70,6 +70,25 @@ class PerformerRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertEquals("Sample Scene", links.first { it.id == linkId }.title)
 
         withTimeout(DEFAULT_TIMEOUT_MS) {
+            repository.updateVideoLinkMetadata(
+                linkId = linkId,
+                title = "Updated Metadata Title",
+                thumbnailUrl = "https://example.com/updated-thumb.jpg",
+            )
+        }
+
+        val allLinks = withTimeout(FLOW_TIMEOUT_MS) {
+            repository.observeAllVideoLinks(uid).first { list ->
+                list.any {
+                    it.id == linkId &&
+                        it.title == "Updated Metadata Title" &&
+                        it.thumbnailUrl == "https://example.com/updated-thumb.jpg"
+                }
+            }
+        }
+        assertTrue(allLinks.any { it.id == linkId })
+
+        withTimeout(DEFAULT_TIMEOUT_MS) {
             repository.deletePerformer(performerId)
         }
 

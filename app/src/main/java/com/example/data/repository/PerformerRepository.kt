@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import com.example.R
 import com.example.data.local.InitialPerformers
+import com.example.data.remote.VideoMetadataExtractor
 import com.example.domain.model.Performer
 import com.example.domain.model.VideoLink
 import com.google.firebase.Timestamp
@@ -135,6 +136,31 @@ class PerformerRepository(
                         )
                     }
                     .sortedByDescending { it.addedAt }
+            }
+            .catch { error ->
+                logStreamErrorIfAuthenticated(error, OperationType.LIST, path, userId)
+                throw error
+            }
+    }
+
+    fun observeAllVideoLinks(userId: String): Flow<List<VideoLink>> {
+        val path = "users/$userId/video_links"
+        return videoLinksCollection(userId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(
+                    FirestoreVideoLink::class.java,
+                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE,
+                ).map { doc ->
+                    VideoLink(
+                        id = doc.id,
+                        performerId = doc.performerId,
+                        title = doc.title,
+                        url = doc.url,
+                        thumbnailUrl = doc.thumbnailUrl,
+                        addedAt = doc.createdAt?.toDate()?.time ?: 0L,
+                    )
+                }
             }
             .catch { error ->
                 logStreamErrorIfAuthenticated(error, OperationType.LIST, path, userId)
@@ -400,6 +426,37 @@ class PerformerRepository(
         }
     }
 
+    suspend fun updateVideoLinkMetadata(
+        linkId: String,
+        title: String?,
+        thumbnailUrl: String?,
+    ) {
+        val uid = requireUserId()
+        require(linkId.isNotBlank()) { "Video-Link-ID darf nicht leer sein" }
+        val updates = mutableMapOf<String, Any?>(
+            "updatedAt" to FieldValue.serverTimestamp(),
+        )
+        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }?.take(200)
+        if (cleanTitle != null) {
+            updates["title"] = cleanTitle
+        }
+        val cleanThumb = thumbnailUrl?.trim()?.takeIf { it.isNotEmpty() }
+        if (cleanThumb != null && cleanThumb.length <= 250_000) {
+            updates["thumbnailUrl"] = cleanThumb
+        }
+        if (updates.size <= 1) return
+
+        val docRef = videoLinksCollection(uid).document(linkId)
+        try {
+            docRef.update(updates).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
     suspend fun deleteVideoLink(linkId: String) {
         val uid = requireUserId()
         require(linkId.isNotBlank()) { "Video-Link-ID darf nicht leer sein" }
@@ -431,10 +488,6 @@ class PerformerRepository(
     }
 
     private fun deriveTitleFromUrl(url: String): String {
-        val withoutQuery = url.substringBefore('?').substringBefore('#').trimEnd('/')
-        val lastSegment = withoutQuery.substringAfterLast('/', "").trim()
-        return lastSegment.ifEmpty {
-            url.removePrefix("https://").removePrefix("http://").take(36)
-        }
+        return VideoMetadataExtractor.deriveReadableTitleFromUrl(url)
     }
 }

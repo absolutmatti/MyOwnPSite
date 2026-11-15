@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.remote.VideoMetadataExtractor
 import com.example.data.repository.PerformerRepository
 import com.example.domain.model.AlphabetBucket
 import com.example.domain.model.Performer
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed interface CatalogContentState {
     data object Loading : CatalogContentState
@@ -62,6 +64,7 @@ private data class FilterCriteria(
 class VideothekViewModel(
     private val repository: PerformerRepository,
     private val currentUserId: String,
+    private val metadataExtractor: VideoMetadataExtractor = VideoMetadataExtractor(),
 ) : ViewModel() {
 
     private val destinationState = MutableStateFlow<ScreenDestination>(ScreenDestination.Catalog)
@@ -78,6 +81,7 @@ class VideothekViewModel(
     private val statusMessageState = MutableStateFlow<String?>(null)
     private val streamErrorState = MutableStateFlow<String?>(null)
     private val hasReceivedSnapshotState = MutableStateFlow(false)
+    private val attemptedEnrichmentIds = mutableSetOf<String>()
 
     private val performersStream = repository.observeAllPerformers(currentUserId)
         .catch { error ->
@@ -172,6 +176,46 @@ class VideothekViewModel(
 
     init {
         initializeCatalog()
+        startAutoMetadataEnrichment()
+    }
+
+    private fun startAutoMetadataEnrichment() {
+        viewModelScope.launch {
+            repository.observeAllVideoLinks(currentUserId)
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "Metadata enrichment stream paused", error)
+                }
+                .collect { links ->
+                    links.forEach { link ->
+                        if (!link.hasThumbnail && attemptedEnrichmentIds.add(link.id)) {
+                            launch {
+                                val extracted = withTimeoutOrNull(METADATA_TIMEOUT_MS) {
+                                    runCatching { metadataExtractor.fetchMetadata(link.url) }.getOrNull()
+                                } ?: return@launch
+
+                                val slugTitle = VideoMetadataExtractor.deriveReadableTitleFromUrl(link.url)
+                                val shouldUpdateTitle = extracted.title != null &&
+                                    (link.title.isBlank() || link.title.equals(slugTitle, ignoreCase = true) || link.title.contains('-'))
+                                val updatedTitle = if (shouldUpdateTitle) extracted.title else null
+                                val updatedThumb = extracted.thumbnailUrl?.takeIf { it.isNotBlank() }
+
+                                if (updatedTitle != null || updatedThumb != null) {
+                                    runCatching {
+                                        repository.updateVideoLinkMetadata(
+                                            linkId = link.id,
+                                            title = updatedTitle,
+                                            thumbnailUrl = updatedThumb,
+                                        )
+                                    }.onFailure { err ->
+                                        Log.w(TAG, "Failed to update enriched metadata for ${link.id}", err)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+        }
     }
 
     fun initializeCatalog() {
@@ -306,14 +350,35 @@ class VideothekViewModel(
     fun addVideoLink(performerId: String, title: String, url: String, thumbnailUrl: String?) {
         val trimmedUrl = url.trim()
         if (trimmedUrl.isEmpty()) return
+        val needsTitle = title.trim().isEmpty()
+        val needsThumb = thumbnailUrl.isNullOrBlank()
         viewModelScope.launch {
             runCatching {
-                repository.addVideoLink(
+                var resolvedTitle = title.trim()
+                var resolvedThumb = thumbnailUrl?.trim()?.takeIf { it.isNotEmpty() }
+
+                if (needsTitle || needsThumb) {
+                    statusMessageState.value = "Video-Infos werden geladen…"
+                    val extracted = withTimeoutOrNull(METADATA_TIMEOUT_MS) {
+                        runCatching { metadataExtractor.fetchMetadata(trimmedUrl) }.getOrNull()
+                    }
+                    if (needsTitle) {
+                        resolvedTitle = extracted?.title.orEmpty()
+                    }
+                    if (needsThumb) {
+                        resolvedThumb = extracted?.thumbnailUrl
+                    }
+                }
+
+                val linkId = repository.addVideoLink(
                     performerId = performerId,
-                    title = title,
+                    title = resolvedTitle,
                     url = trimmedUrl,
-                    thumbnailUrl = thumbnailUrl,
+                    thumbnailUrl = resolvedThumb,
                 )
+                if (!resolvedThumb.isNullOrBlank()) {
+                    attemptedEnrichmentIds.add(linkId)
+                }
                 statusMessageState.value = "Video-Link synchronisiert"
             }.onFailure { throwable ->
                 statusMessageState.value = throwable.localizedMessage ?: "Link konnte nicht gespeichert werden"
@@ -379,5 +444,6 @@ class VideothekViewModel(
 
     private companion object {
         const val TAG = "VideothekVM"
+        const val METADATA_TIMEOUT_MS = 6_500L
     }
 }

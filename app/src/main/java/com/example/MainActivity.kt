@@ -5,12 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -20,9 +25,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,6 +47,9 @@ import com.example.ui.screens.CatalogScreen
 import com.example.ui.screens.PerformerDetailScreen
 import com.example.ui.screens.attemptAutoSignIn
 import com.example.ui.screens.signOutUser
+import com.example.ui.theme.CardSurfaceElevated
+import com.example.ui.theme.CinemaAmberLight
+import com.example.ui.theme.CinemaGold
 import com.example.ui.theme.VideothekTvTheme
 import com.example.ui.viewmodel.ScreenDestination
 import com.example.ui.viewmodel.VideothekViewModel
@@ -124,6 +138,7 @@ private fun AppNavigation() {
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun AuthenticatedVideothekContent(
     currentUserId: String,
@@ -224,6 +239,31 @@ private fun AuthenticatedVideothekContent(
                 onConfirm = viewModel::addPerformer,
                 onDismiss = { viewModel.setAddPerformerDialogVisible(false) },
             )
+        }
+
+        AnimatedVisibility(
+            visible = uiState.statusMessage != null && uiState.destination is ScreenDestination.Detail,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(180)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 28.dp),
+        ) {
+            uiState.statusMessage?.let { msg ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CardSurfaceElevated)
+                        .border(1.5.dp, CinemaGold, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = CinemaAmberLight,
+                    )
+                }
+            }
         }
     }
 }

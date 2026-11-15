@@ -154,10 +154,78 @@ function normalizeUrl(rawUrl) {
   return `https://${trimmed}`;
 }
 
+function extractEpornerVideoId(url) {
+  const match = String(url || "").match(/eporner\.com\/(?:video-|hd-porn\/)([A-Za-z0-9]+)/i);
+  return match ? match[1] : null;
+}
+
 function deriveTitle(url) {
-  const clean = url.split("?")[0].split("#")[0].replace(/\/+$/, "");
-  const segment = clean.split("/").pop();
-  return (segment || url.replace(/^https?:\/\//i, "")).slice(0, 200);
+  const clean = String(url || "").split("?")[0].split("#")[0].replace(/\/+$/, "");
+  const segments = clean.split("/").filter(Boolean);
+  const slugSegment = [...segments]
+    .reverse()
+    .find(
+      (seg) =>
+        !/^https?:$/i.test(seg) &&
+        !/^www\./i.test(seg) &&
+        !/\.(com|net|org|tv|io)$/i.test(seg) &&
+        !/^(video|watch|embed|hd-porn)$/i.test(seg) &&
+        !/^video-[A-Za-z0-9]+$/i.test(seg)
+    );
+
+  if (slugSegment) {
+    const cleaned = slugSegment
+      .replace(/\.(html?|php|mp4|webm)$/i, "")
+      .replace(/[-_+]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (cleaned) {
+      return cleaned
+        .split(" ")
+        .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ""))
+        .join(" ")
+        .slice(0, 200);
+    }
+  }
+
+  return (clean.replace(/^https?:\/\//i, "") || "Video").slice(0, 200);
+}
+
+async function fetchVideoMetadataInBrowser(url) {
+  const epornerId = extractEpornerVideoId(url);
+  if (!epornerId) {
+    return { title: null, thumbnailUrl: null };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+  try {
+    const apiUrl = `https://www.eporner.com/api/v2/video/id/?id=${encodeURIComponent(
+      epornerId
+    )}&thumbsize=big&format=json`;
+    const response = await fetch(apiUrl, { signal: controller.signal });
+    if (!response.ok) return { title: null, thumbnailUrl: null };
+    const data = await response.json();
+    const videoObj = Array.isArray(data?.videos) ? data.videos[0] : data;
+    if (!videoObj || typeof videoObj !== "object") {
+      return { title: null, thumbnailUrl: null };
+    }
+    const title =
+      typeof videoObj.title === "string" && videoObj.title.trim()
+        ? videoObj.title.trim().slice(0, 200)
+        : null;
+    const rawThumb =
+      videoObj?.default_thumb?.src ||
+      (Array.isArray(videoObj?.thumbs) ? videoObj.thumbs[0]?.src : null) ||
+      null;
+    const thumbnailUrl =
+      typeof rawThumb === "string" && rawThumb.trim() ? normalizeUrl(rawThumb) : null;
+    return { title, thumbnailUrl };
+  } catch {
+    return { title: null, thumbnailUrl: null };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function escapeHtml(text) {
@@ -692,8 +760,17 @@ async function createVideoLink(performerId, title, url, thumbnailUrl) {
   if (!uid) throw new Error("Bitte zuerst anmelden");
   const normalizedUrl = normalizeUrl(url).slice(0, 2000);
   if (!normalizedUrl) throw new Error("Video-URL darf nicht leer sein");
-  const resolvedTitle = (title.trim() || deriveTitle(normalizedUrl)).slice(0, 200);
-  const normalizedThumb = thumbnailUrl?.trim() ? normalizeUrl(thumbnailUrl) : null;
+
+  let resolvedTitle = title.trim();
+  let normalizedThumb = thumbnailUrl?.trim() ? normalizeUrl(thumbnailUrl) : null;
+
+  if (!resolvedTitle || !normalizedThumb) {
+    const meta = await fetchVideoMetadataInBrowser(normalizedUrl);
+    if (!resolvedTitle) resolvedTitle = meta.title;
+    if (!normalizedThumb && meta.thumbnailUrl) normalizedThumb = meta.thumbnailUrl;
+  }
+
+  resolvedTitle = (resolvedTitle || deriveTitle(normalizedUrl)).slice(0, 200);
   if (normalizedThumb && normalizedThumb.length > 250_000) {
     throw new Error("Thumbnail überschreitet das 250-KB-Limit.");
   }
@@ -707,6 +784,7 @@ async function createVideoLink(performerId, title, url, thumbnailUrl) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  return { hasThumb: Boolean(normalizedThumb) };
 }
 
 async function updateVideoLinkDoc(linkId, title, url, thumbnailUrl) {
@@ -919,12 +997,24 @@ function initEvents() {
       title: "Video-Link hinzufügen",
       fields: [
         { name: "url", label: "Video-URL", placeholder: "https://…", required: true },
-        { name: "title", label: "Titel des Videos (optional)", placeholder: "z. B. Szene Titel" },
-        { name: "thumbnailUrl", label: "Thumbnail-URL (optional)", placeholder: "https://…" },
+        {
+          name: "title",
+          label: "Titel (optional – leer = automatisch)",
+          placeholder: "Leer lassen für automatische Erkennung",
+        },
+        {
+          name: "thumbnailUrl",
+          label: "Thumbnail-URL (optional – leer = automatisch)",
+          placeholder: "Leer lassen – TV lädt Thumbnail nach",
+        },
       ],
       onSubmit: async ({ url, title, thumbnailUrl }) => {
-        await createVideoLink(performer.id, title, url, thumbnailUrl);
-        showToast("Video-Link synchronisiert");
+        const res = await createVideoLink(performer.id, title, url, thumbnailUrl);
+        showToast(
+          res?.hasThumb
+            ? "Video-Link & Thumbnail synchronisiert"
+            : "Link gespeichert (TV lädt fehlendes Thumbnail automatisch nach)"
+        );
       },
     });
   });

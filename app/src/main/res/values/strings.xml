@@ -24,9 +24,9 @@
     <string name="dialog_url_label">https://… oder file:///…</string>
     <string name="dialog_video_link_add_title">Video-Link hinzufügen</string>
     <string name="dialog_video_link_edit_title">Video-Link bearbeiten</string>
-    <string name="dialog_video_title_label">Titel (optional)</string>
+    <string name="dialog_video_title_label">Titel (optional – leer = automatisch)</string>
     <string name="dialog_video_url_label">Video-URL (https://…)</string>
-    <string name="dialog_video_thumbnail_label">Thumbnail-URL (optional, https://…)</string>
+    <string name="dialog_video_thumbnail_label">Thumbnail-URL (optional – leer = automatisch)</string>
     <string name="empty_state_title">Keine Treffer gefunden</string>
     <string name="empty_state_subtitle">Filter zurücksetzen oder Suche anpassen.</string>
     <string name="reset_filters">Filter zurücksetzen</string>
