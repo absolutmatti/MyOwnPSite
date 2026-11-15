@@ -1,0 +1,6 @@
+{
+  "name": "Videothek",
+  "description": "Android TV Videothek-Katalog sortiert nach Darstellerinnen mit 9:16-Kacheln.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
