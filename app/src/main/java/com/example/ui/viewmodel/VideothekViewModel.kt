@@ -5,14 +5,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.repository.PerformerRepository
 import com.example.domain.model.AlphabetBucket
-import com.example.domain.model.CatalogFilter
 import com.example.domain.model.Performer
 import com.example.domain.model.SortOrder
+import com.example.domain.model.VideoLink
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,7 +25,7 @@ sealed interface CatalogContentState {
     data class Ready(
         val performers: List<Performer>,
         val totalCount: Int,
-        val withImageCount: Int,
+        val totalVideoLinks: Int,
     ) : CatalogContentState
     data class Error(val message: String) : CatalogContentState
 }
@@ -36,9 +39,9 @@ data class VideothekUiState(
     val contentState: CatalogContentState = CatalogContentState.Loading,
     val destination: ScreenDestination = ScreenDestination.Catalog,
     val selectedPerformer: Performer? = null,
+    val selectedPerformerVideoLinks: List<VideoLink> = emptyList(),
     val lastFocusedPerformerId: Long? = null,
-    val sortOrder: SortOrder = SortOrder.A_TO_Z,
-    val catalogFilter: CatalogFilter = CatalogFilter.ALL,
+    val sortOrder: SortOrder = SortOrder.ALPHA_ASC,
     val alphabetBucket: AlphabetBucket = AlphabetBucket.ALL,
     val searchQuery: String = "",
     val isSearchActive: Boolean = false,
@@ -48,12 +51,12 @@ data class VideothekUiState(
 
 private data class FilterCriteria(
     val sortOrder: SortOrder,
-    val catalogFilter: CatalogFilter,
     val alphabetBucket: AlphabetBucket,
     val searchQuery: String,
     val isSearchActive: Boolean,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class VideothekViewModel(
     private val repository: PerformerRepository,
 ) : ViewModel() {
@@ -62,8 +65,7 @@ class VideothekViewModel(
     private val lastFocusedIdState = MutableStateFlow<Long?>(null)
     private val filterCriteriaState = MutableStateFlow(
         FilterCriteria(
-            sortOrder = SortOrder.A_TO_Z,
-            catalogFilter = CatalogFilter.ALL,
+            sortOrder = SortOrder.ALPHA_ASC,
             alphabetBucket = AlphabetBucket.ALL,
             searchQuery = "",
             isSearchActive = false,
@@ -73,12 +75,20 @@ class VideothekViewModel(
     private val statusMessageState = MutableStateFlow<String?>(null)
     private val seedErrorState = MutableStateFlow<String?>(null)
 
+    private val selectedVideoLinksFlow = destinationState.flatMapLatest { destination ->
+        when (destination) {
+            is ScreenDestination.Detail -> repository.observeVideoLinks(destination.performerId)
+            ScreenDestination.Catalog -> flowOf(emptyList())
+        }
+    }
+
     val uiState: StateFlow<VideothekUiState> = combine(
         repository.observeAllPerformers()
             .catch { throwable ->
                 seedErrorState.value = throwable.localizedMessage ?: "Datenbankfehler beim Laden."
                 emit(emptyList())
             },
+        selectedVideoLinksFlow,
         destinationState,
         lastFocusedIdState,
         filterCriteriaState,
@@ -88,12 +98,14 @@ class VideothekViewModel(
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val allPerformers = values[0] as List<Performer>
-        val destination = values[1] as ScreenDestination
-        val lastFocusedId = values[2] as Long?
-        val criteria = values[3] as FilterCriteria
-        val showAddDialog = values[4] as Boolean
-        val statusMessage = values[5] as String?
-        val seedError = values[6] as String?
+        @Suppress("UNCHECKED_CAST")
+        val selectedLinks = values[1] as List<VideoLink>
+        val destination = values[2] as ScreenDestination
+        val lastFocusedId = values[3] as Long?
+        val criteria = values[4] as FilterCriteria
+        val showAddDialog = values[5] as Boolean
+        val statusMessage = values[6] as String?
+        val seedError = values[7] as String?
 
         val selectedPerformer = when (destination) {
             is ScreenDestination.Detail -> allPerformers.find { it.id == destination.performerId }
@@ -103,11 +115,11 @@ class VideothekViewModel(
         val contentState = if (seedError != null && allPerformers.isEmpty()) {
             CatalogContentState.Error(seedError)
         } else {
-            val filtered = applyFilters(allPerformers, criteria)
+            val filtered = applySortingAndFilters(allPerformers, criteria)
             CatalogContentState.Ready(
                 performers = filtered,
                 totalCount = allPerformers.size,
-                withImageCount = allPerformers.count { it.hasImage },
+                totalVideoLinks = allPerformers.sumOf { it.videoCount },
             )
         }
 
@@ -115,9 +127,9 @@ class VideothekViewModel(
             contentState = contentState,
             destination = destination,
             selectedPerformer = selectedPerformer,
+            selectedPerformerVideoLinks = selectedLinks,
             lastFocusedPerformerId = lastFocusedId,
             sortOrder = criteria.sortOrder,
-            catalogFilter = criteria.catalogFilter,
             alphabetBucket = criteria.alphabetBucket,
             searchQuery = criteria.searchQuery,
             isSearchActive = criteria.isSearchActive,
@@ -162,19 +174,12 @@ class VideothekViewModel(
         filterCriteriaState.update { it.copy(sortOrder = sortOrder) }
     }
 
-    fun toggleSortOrder() {
+    fun cycleSortOrder() {
         filterCriteriaState.update { current ->
-            val next = if (current.sortOrder == SortOrder.A_TO_Z) {
-                SortOrder.Z_TO_A
-            } else {
-                SortOrder.A_TO_Z
-            }
+            val entries = SortOrder.entries
+            val next = entries[(entries.indexOf(current.sortOrder) + 1) % entries.size]
             current.copy(sortOrder = next)
         }
-    }
-
-    fun setCatalogFilter(filter: CatalogFilter) {
-        filterCriteriaState.update { it.copy(catalogFilter = filter) }
     }
 
     fun setAlphabetBucket(bucket: AlphabetBucket) {
@@ -197,8 +202,7 @@ class VideothekViewModel(
 
     fun resetFilters() {
         filterCriteriaState.value = FilterCriteria(
-            sortOrder = SortOrder.A_TO_Z,
-            catalogFilter = CatalogFilter.ALL,
+            sortOrder = SortOrder.ALPHA_ASC,
             alphabetBucket = AlphabetBucket.ALL,
             searchQuery = "",
             isSearchActive = false,
@@ -239,14 +243,6 @@ class VideothekViewModel(
         }
     }
 
-    fun toggleFavorite(performer: Performer) {
-        viewModelScope.launch {
-            runCatching {
-                repository.toggleFavorite(id = performer.id, currentFavorite = performer.isFavorite)
-            }
-        }
-    }
-
     fun renamePerformer(id: Long, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return
@@ -268,30 +264,63 @@ class VideothekViewModel(
         }
     }
 
+    fun addVideoLink(performerId: Long, title: String, url: String) {
+        val trimmedUrl = url.trim()
+        if (trimmedUrl.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                repository.addVideoLink(performerId = performerId, title = title, url = trimmedUrl)
+                statusMessageState.value = "Video-Link gespeichert"
+            }.onFailure { throwable ->
+                statusMessageState.value = throwable.localizedMessage ?: "Link konnte nicht gespeichert werden"
+            }
+        }
+    }
+
+    fun updateVideoLink(linkId: Long, title: String, url: String) {
+        val trimmedUrl = url.trim()
+        if (trimmedUrl.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                repository.updateVideoLink(linkId = linkId, title = title, url = trimmedUrl)
+                statusMessageState.value = "Video-Link aktualisiert"
+            }
+        }
+    }
+
+    fun deleteVideoLink(linkId: Long) {
+        viewModelScope.launch {
+            runCatching {
+                repository.deleteVideoLink(linkId)
+                statusMessageState.value = "Video-Link entfernt"
+            }
+        }
+    }
+
     fun clearStatusMessage() {
         statusMessageState.value = null
     }
 
-    private fun applyFilters(
+    private fun applySortingAndFilters(
         allPerformers: List<Performer>,
         criteria: FilterCriteria,
     ): List<Performer> {
         val query = criteria.searchQuery.trim()
         val filtered = allPerformers.filter { performer ->
-            val matchesFilter = when (criteria.catalogFilter) {
-                CatalogFilter.ALL -> true
-                CatalogFilter.FAVORITES -> performer.isFavorite
-                CatalogFilter.WITHOUT_IMAGE -> !performer.hasImage
-                CatalogFilter.WITH_IMAGE -> performer.hasImage
-            }
             val matchesBucket = criteria.alphabetBucket.matches(performer.name)
             val matchesQuery = query.isEmpty() || performer.name.contains(query, ignoreCase = true)
-            matchesFilter && matchesBucket && matchesQuery
+            matchesBucket && matchesQuery
         }
 
         return when (criteria.sortOrder) {
-            SortOrder.A_TO_Z -> filtered.sortedBy { it.name.lowercase() }
-            SortOrder.Z_TO_A -> filtered.sortedByDescending { it.name.lowercase() }
+            SortOrder.ALPHA_ASC -> filtered.sortedBy { it.name.lowercase() }
+            SortOrder.ALPHA_DESC -> filtered.sortedByDescending { it.name.lowercase() }
+            SortOrder.VIDEOS_DESC -> filtered.sortedWith(
+                compareByDescending<Performer> { it.videoCount }.thenBy { it.name.lowercase() }
+            )
+            SortOrder.VIDEOS_ASC -> filtered.sortedWith(
+                compareBy<Performer> { it.videoCount }.thenBy { it.name.lowercase() }
+            )
         }
     }
 

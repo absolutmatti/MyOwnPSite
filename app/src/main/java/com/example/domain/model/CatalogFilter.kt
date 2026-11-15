@@ -1,15 +1,10 @@
 package com.example.domain.model
 
 enum class SortOrder(val label: String) {
-    A_TO_Z("A–Z"),
-    Z_TO_A("Z–A"),
-}
-
-enum class CatalogFilter(val label: String) {
-    ALL("Alle"),
-    FAVORITES("Favoriten"),
-    WITHOUT_IMAGE("Ohne Bild"),
-    WITH_IMAGE("Mit Bild"),
+    ALPHA_ASC("Alphabet A–Z"),
+    ALPHA_DESC("Alphabet Z–A"),
+    VIDEOS_DESC("Meiste Videos"),
+    VIDEOS_ASC("Wenigste Videos"),
 }
 
 enum class AlphabetBucket(val label: String, val range: CharRange?) {

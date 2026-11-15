@@ -34,7 +34,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = VideothekDatabase.getInstance(applicationContext)
-        val repository = PerformerRepository(database.performerDao())
+        val repository = PerformerRepository(
+            performerDao = database.performerDao(),
+            videoLinkDao = database.videoLinkDao(),
+        )
 
         setContent {
             VideothekTvTheme {
@@ -64,8 +67,8 @@ class MainActivity : ComponentActivity() {
                                     uiState = uiState,
                                     onSelectPerformer = viewModel::openPerformerDetail,
                                     onPerformerFocused = viewModel::updateLastFocusedPerformer,
-                                    onToggleSortOrder = viewModel::toggleSortOrder,
-                                    onSelectCatalogFilter = viewModel::setCatalogFilter,
+                                    onCycleSortOrder = viewModel::cycleSortOrder,
+                                    onSelectSortOrder = viewModel::setSortOrder,
                                     onSelectAlphabetBucket = viewModel::setAlphabetBucket,
                                     onToggleSearch = viewModel::toggleSearchBar,
                                     onSearchQueryChange = viewModel::setSearchQuery,
@@ -82,12 +85,10 @@ class MainActivity : ComponentActivity() {
                                 if (performer != null) {
                                     PerformerDetailScreen(
                                         performer = performer,
+                                        videoLinks = uiState.selectedPerformerVideoLinks,
                                         onBack = viewModel::navigateBackToCatalog,
                                         onUpdateImageUri = { uri ->
                                             viewModel.updatePerformerImage(performer.id, uri)
-                                        },
-                                        onToggleFavorite = {
-                                            viewModel.toggleFavorite(performer)
                                         },
                                         onRename = { newName ->
                                             viewModel.renamePerformer(performer.id, newName)
@@ -95,6 +96,11 @@ class MainActivity : ComponentActivity() {
                                         onDelete = {
                                             viewModel.deletePerformer(performer.id)
                                         },
+                                        onAddVideoLink = { title, url ->
+                                            viewModel.addVideoLink(performer.id, title, url)
+                                        },
+                                        onUpdateVideoLink = viewModel::updateVideoLink,
+                                        onDeleteVideoLink = viewModel::deleteVideoLink,
                                     )
                                 } else {
                                     LaunchedEffect(Unit) {

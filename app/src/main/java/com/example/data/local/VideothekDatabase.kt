@@ -4,18 +4,41 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [PerformerEntity::class],
-    version = 1,
+    entities = [PerformerEntity::class, VideoLinkEntity::class],
+    version = 2,
     exportSchema = false,
 )
 abstract class VideothekDatabase : RoomDatabase() {
     abstract fun performerDao(): PerformerDao
+    abstract fun videoLinkDao(): VideoLinkDao
 
     companion object {
         @Volatile
         private var instance: VideothekDatabase? = null
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `video_links` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `performerId` INTEGER NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `url` TEXT NOT NULL,
+                        `addedAt` INTEGER NOT NULL,
+                        FOREIGN KEY(`performerId`) REFERENCES `performers`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_video_links_performerId` ON `video_links` (`performerId`)"
+                )
+            }
+        }
 
         fun getInstance(context: Context): VideothekDatabase {
             return instance ?: synchronized(this) {
@@ -23,7 +46,10 @@ abstract class VideothekDatabase : RoomDatabase() {
                     context.applicationContext,
                     VideothekDatabase::class.java,
                     "videothek_tv.db",
-                ).build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
             }
         }
     }

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,13 +28,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,18 +52,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
+import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.R
 import com.example.domain.model.Performer
+import com.example.domain.model.VideoLink
 import com.example.ui.components.PerformerPortraitFrame
 import com.example.ui.components.TvConfirmDeleteDialog
 import com.example.ui.components.TvTextInputDialog
+import com.example.ui.components.TvVideoLinkDialog
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CardSurface
 import com.example.ui.theme.CardSurfaceElevated
@@ -79,11 +86,14 @@ import com.example.ui.theme.TextSecondary
 @Composable
 fun PerformerDetailScreen(
     performer: Performer,
+    videoLinks: List<VideoLink>,
     onBack: () -> Unit,
     onUpdateImageUri: (String?) -> Unit,
-    onToggleFavorite: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
+    onAddVideoLink: (title: String, url: String) -> Unit,
+    onUpdateVideoLink: (linkId: Long, title: String, url: String) -> Unit,
+    onDeleteVideoLink: (linkId: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onBack)
@@ -94,7 +104,9 @@ fun PerformerDetailScreen(
     var showUrlDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var pickerUnavailableHint by remember { mutableStateOf<String?>(null) }
+    var showAddVideoLinkDialog by remember { mutableStateOf(false) }
+    var editingVideoLink by remember { mutableStateOf<VideoLink?>(null) }
+    var feedbackHint by remember { mutableStateOf<String?>(null) }
 
     val documentPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -107,13 +119,32 @@ fun PerformerDetailScreen(
                 )
             }
             onUpdateImageUri(uri.toString())
-            pickerUnavailableHint = null
+            feedbackHint = null
         }
     }
 
     LaunchedEffect(performer.id) {
         runCatching {
             primaryActionFocusRequester.requestFocus()
+        }
+    }
+
+    fun openVideoUrl(rawUrl: String) {
+        val normalized = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ||
+            rawUrl.startsWith("content://") || rawUrl.startsWith("file://")
+        ) {
+            rawUrl
+        } else {
+            "https://$rawUrl"
+        }
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
+            context.startActivity(intent)
+            feedbackHint = null
+        } catch (_: ActivityNotFoundException) {
+            feedbackHint = "Keine App bzw. kein Browser zum Öffnen von \"$normalized\" auf diesem Gerät installiert."
+        } catch (_: IllegalArgumentException) {
+            feedbackHint = "Ungültiger Video-Link: \"$rawUrl\""
         }
     }
 
@@ -139,13 +170,14 @@ fun PerformerDetailScreen(
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     horizontalArrangement = Arrangement.spacedBy(44.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                 ) {
                     // Left: Large 9:16 Portrait Preview Card
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight(0.86f)
+                            .fillMaxHeight(0.88f)
                             .aspectRatio(9f / 16f)
+                            .align(Alignment.CenterVertically)
                             .clip(RoundedCornerShape(18.dp))
                             .border(2.dp, CinemaGold.copy(alpha = 0.65f), RoundedCornerShape(18.dp)),
                     ) {
@@ -157,27 +189,32 @@ fun PerformerDetailScreen(
                         )
                     }
 
-                    // Right: Performer Metadata & D-Pad Action List
-                    DetailActionsColumn(
+                    // Right: Performer Metadata, Video-Links & Image Actions
+                    DetailContentColumn(
                         performer = performer,
+                        videoLinks = videoLinks,
                         primaryActionFocusRequester = primaryActionFocusRequester,
-                        pickerUnavailableHint = pickerUnavailableHint,
+                        feedbackHint = feedbackHint,
                         onBack = onBack,
+                        onOpenAddVideoLinkDialog = { showAddVideoLinkDialog = true },
+                        onOpenVideoLink = { link -> openVideoUrl(link.url) },
+                        onEditVideoLink = { link -> editingVideoLink = link },
+                        onDeleteVideoLink = { link -> onDeleteVideoLink(link.id) },
                         onPickLocalImage = {
                             try {
                                 documentPickerLauncher.launch(arrayOf("image/*"))
                             } catch (_: ActivityNotFoundException) {
-                                pickerUnavailableHint =
+                                feedbackHint =
                                     "Auf diesem TV-Gerät ist kein Datei-Picker installiert. Nutze stattdessen 'Bild-URL / Pfad eingeben'."
                             }
                         },
                         onOpenUrlDialog = { showUrlDialog = true },
                         onRemoveImage = { onUpdateImageUri(null) },
-                        onToggleFavorite = onToggleFavorite,
                         onOpenRenameDialog = { showRenameDialog = true },
                         onOpenDeleteDialog = { showDeleteDialog = true },
                         modifier = Modifier
                             .weight(1f)
+                            .fillMaxHeight()
                             .verticalScroll(rememberScrollState()),
                     )
                 }
@@ -204,22 +241,26 @@ fun PerformerDetailScreen(
                         )
                     }
 
-                    DetailActionsColumn(
+                    DetailContentColumn(
                         performer = performer,
+                        videoLinks = videoLinks,
                         primaryActionFocusRequester = primaryActionFocusRequester,
-                        pickerUnavailableHint = pickerUnavailableHint,
+                        feedbackHint = feedbackHint,
                         onBack = onBack,
+                        onOpenAddVideoLinkDialog = { showAddVideoLinkDialog = true },
+                        onOpenVideoLink = { link -> openVideoUrl(link.url) },
+                        onEditVideoLink = { link -> editingVideoLink = link },
+                        onDeleteVideoLink = { link -> onDeleteVideoLink(link.id) },
                         onPickLocalImage = {
                             try {
                                 documentPickerLauncher.launch(arrayOf("image/*"))
                             } catch (_: ActivityNotFoundException) {
-                                pickerUnavailableHint =
+                                feedbackHint =
                                     "Kein Datei-Picker verfügbar. Nutze 'Bild-URL / Pfad eingeben'."
                             }
                         },
                         onOpenUrlDialog = { showUrlDialog = true },
                         onRemoveImage = { onUpdateImageUri(null) },
-                        onToggleFavorite = onToggleFavorite,
                         onOpenRenameDialog = { showRenameDialog = true },
                         onOpenDeleteDialog = { showDeleteDialog = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -227,6 +268,34 @@ fun PerformerDetailScreen(
                 }
             }
         }
+    }
+
+    if (showAddVideoLinkDialog) {
+        TvVideoLinkDialog(
+            title = stringResource(R.string.dialog_video_link_add_title),
+            initialTitle = "",
+            initialUrl = "",
+            confirmText = stringResource(R.string.dialog_confirm),
+            onConfirm = { title, url ->
+                onAddVideoLink(title, url)
+                showAddVideoLinkDialog = false
+            },
+            onDismiss = { showAddVideoLinkDialog = false },
+        )
+    }
+
+    editingVideoLink?.let { currentLink ->
+        TvVideoLinkDialog(
+            title = stringResource(R.string.dialog_video_link_edit_title),
+            initialTitle = currentLink.title,
+            initialUrl = currentLink.url,
+            confirmText = stringResource(R.string.dialog_confirm),
+            onConfirm = { title, url ->
+                onUpdateVideoLink(currentLink.id, title, url)
+                editingVideoLink = null
+            },
+            onDismiss = { editingVideoLink = null },
+        )
     }
 
     if (showUrlDialog) {
@@ -271,21 +340,25 @@ fun PerformerDetailScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun DetailActionsColumn(
+private fun DetailContentColumn(
     performer: Performer,
+    videoLinks: List<VideoLink>,
     primaryActionFocusRequester: FocusRequester,
-    pickerUnavailableHint: String?,
+    feedbackHint: String?,
     onBack: () -> Unit,
+    onOpenAddVideoLinkDialog: () -> Unit,
+    onOpenVideoLink: (VideoLink) -> Unit,
+    onEditVideoLink: (VideoLink) -> Unit,
+    onDeleteVideoLink: (VideoLink) -> Unit,
     onPickLocalImage: () -> Unit,
     onOpenUrlDialog: () -> Unit,
     onRemoveImage: () -> Unit,
-    onToggleFavorite: () -> Unit,
     onOpenRenameDialog: () -> Unit,
     onOpenDeleteDialog: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Button(
@@ -308,8 +381,6 @@ private fun DetailActionsColumn(
             Text(text = stringResource(R.string.detail_back))
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
         Text(
             text = performer.name,
             style = MaterialTheme.typography.displaySmall,
@@ -321,17 +392,18 @@ private fun DetailActionsColumn(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusPill(
+                text = if (videoLinks.size == 1) "1 Video-Link" else "${videoLinks.size} Video-Links",
+                highlighted = videoLinks.isNotEmpty(),
+            )
+            StatusPill(
                 text = if (performer.hasImage) "9:16-Bild hinterlegt" else "Leere 9:16-Kachel",
                 highlighted = performer.hasImage,
             )
-            if (performer.isFavorite) {
-                StatusPill(text = "Favorit", highlighted = true)
-            }
         }
 
-        if (pickerUnavailableHint != null) {
+        if (feedbackHint != null) {
             Text(
-                text = pickerUnavailableHint,
+                text = feedbackHint,
                 style = MaterialTheme.typography.bodyMedium,
                 color = CinemaAmberLight,
                 modifier = Modifier
@@ -341,16 +413,82 @@ private fun DetailActionsColumn(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        // Video-Links Section
+        Spacer(modifier = Modifier.height(4.dp))
+
+        DetailActionButton(
+            icon = Icons.Filled.AddLink,
+            label = stringResource(R.string.detail_add_video_link),
+            isPrimary = true,
+            onClick = onOpenAddVideoLinkDialog,
+            modifier = Modifier
+                .focusRequester(primaryActionFocusRequester)
+                .testTag("add_video_link_button"),
+        )
+
+        Text(
+            text = stringResource(R.string.detail_video_links_title),
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+
+        if (videoLinks.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CardSurface)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.VideoLibrary,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                    )
+                    Text(
+                        text = stringResource(R.string.detail_video_links_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                    )
+                }
+            }
+        } else {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(0.92f),
+            ) {
+                videoLinks.forEach { link ->
+                    VideoLinkRow(
+                        videoLink = link,
+                        onOpen = { onOpenVideoLink(link) },
+                        onEdit = { onEditVideoLink(link) },
+                        onDelete = { onDeleteVideoLink(link) },
+                    )
+                }
+            }
+        }
+
+        // 9:16 Image & Entry Management Section
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "9:16-Bild & Eintrag",
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+        )
 
         DetailActionButton(
             icon = Icons.Filled.AddPhotoAlternate,
             label = stringResource(R.string.detail_pick_local_image),
-            isPrimary = true,
+            isPrimary = false,
             onClick = onPickLocalImage,
-            modifier = Modifier
-                .focusRequester(primaryActionFocusRequester)
-                .testTag("pick_local_image_button"),
+            modifier = Modifier.testTag("pick_local_image_button"),
         )
 
         DetailActionButton(
@@ -359,17 +497,6 @@ private fun DetailActionsColumn(
             isPrimary = false,
             onClick = onOpenUrlDialog,
             modifier = Modifier.testTag("enter_image_url_button"),
-        )
-
-        DetailActionButton(
-            icon = if (performer.isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-            label = stringResource(
-                if (performer.isFavorite) R.string.detail_toggle_favorite_on
-                else R.string.detail_toggle_favorite_off
-            ),
-            isPrimary = false,
-            onClick = onToggleFavorite,
-            modifier = Modifier.testTag("toggle_favorite_button"),
         )
 
         DetailActionButton(
@@ -398,6 +525,97 @@ private fun DetailActionsColumn(
             onClick = onOpenDeleteDialog,
             modifier = Modifier.testTag("delete_performer_button"),
         )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VideoLinkRow(
+    videoLink: VideoLink,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(CardSurface)
+            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Button(
+            onClick = onOpen,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("open_video_link_${videoLink.id}"),
+            colors = ButtonDefaults.colors(
+                containerColor = CardSurfaceElevated,
+                contentColor = TextPrimary,
+                focusedContainerColor = CinemaGold,
+                focusedContentColor = ObsidianBackground,
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = videoLink.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = videoLink.url,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onEdit,
+            modifier = Modifier
+                .size(48.dp)
+                .testTag("edit_video_link_${videoLink.id}"),
+            colors = IconButtonDefaults.colors(
+                containerColor = CardSurfaceElevated,
+                contentColor = TextPrimary,
+                focusedContainerColor = CinemaGold,
+                focusedContentColor = ObsidianBackground,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = "Link bearbeiten",
+            )
+        }
+
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier
+                .size(48.dp)
+                .testTag("delete_video_link_${videoLink.id}"),
+            colors = IconButtonDefaults.colors(
+                containerColor = DangerRedContainer,
+                contentColor = DangerRed,
+                focusedContainerColor = DangerRed,
+                focusedContentColor = ObsidianBackground,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DeleteOutline,
+                contentDescription = "Link löschen",
+            )
+        }
     }
 }
 
@@ -449,7 +667,7 @@ private fun DetailActionButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(0.85f),
+        modifier = modifier.fillMaxWidth(0.9f),
         colors = ButtonDefaults.colors(
             containerColor = containerColor,
             contentColor = contentColor,

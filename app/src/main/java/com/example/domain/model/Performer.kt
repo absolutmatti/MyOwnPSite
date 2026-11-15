@@ -4,7 +4,7 @@ data class Performer(
     val id: Long,
     val name: String,
     val imageUri: String?,
-    val isFavorite: Boolean,
+    val videoCount: Int,
     val createdAt: Long,
 ) {
     val hasImage: Boolean

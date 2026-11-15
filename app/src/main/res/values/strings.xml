@@ -1,13 +1,6 @@
 <resources>
     <string name="app_name">Videothek</string>
     <string name="tv_title">VIDEOTHEK</string>
-    <string name="tv_subtitle_format">%1$d Darstellerinnen</string>
-    <string name="filter_all">Alle</string>
-    <string name="filter_favorites">Favoriten</string>
-    <string name="filter_empty_images">Ohne Bild</string>
-    <string name="filter_with_images">Mit Bild</string>
-    <string name="sort_az">A–Z</string>
-    <string name="sort_za">Z–A</string>
     <string name="action_add_performer">Neu</string>
     <string name="action_search">Suche</string>
     <string name="search_placeholder">Darstellerin suchen…</string>
@@ -16,8 +9,9 @@
     <string name="detail_pick_local_image">Lokales Bild wählen</string>
     <string name="detail_enter_image_url">Bild-URL / Pfad eingeben</string>
     <string name="detail_remove_image">Bild entfernen</string>
-    <string name="detail_toggle_favorite_on">Als Favorit entfernen</string>
-    <string name="detail_toggle_favorite_off">Als Favorit markieren</string>
+    <string name="detail_add_video_link">Video-Link hinzufügen</string>
+    <string name="detail_video_links_title">Gespeicherte Video-Links</string>
+    <string name="detail_video_links_empty">Noch keine Video-Links hinterlegt. Links können ohne Download direkt gespeichert und geöffnet werden.</string>
     <string name="detail_edit_name">Namen bearbeiten</string>
     <string name="detail_delete_performer">Eintrag löschen</string>
     <string name="dialog_confirm">Speichern</string>
@@ -28,6 +22,10 @@
     <string name="dialog_name_label">Name der Darstellerin</string>
     <string name="dialog_url_title">Bild-URL oder Pfad festlegen</string>
     <string name="dialog_url_label">https://… oder file:///…</string>
+    <string name="dialog_video_link_add_title">Video-Link hinzufügen</string>
+    <string name="dialog_video_link_edit_title">Video-Link bearbeiten</string>
+    <string name="dialog_video_title_label">Titel (optional)</string>
+    <string name="dialog_video_url_label">Video-URL (https://…)</string>
     <string name="empty_state_title">Keine Treffer gefunden</string>
     <string name="empty_state_subtitle">Filter zurücksetzen oder Suche anpassen.</string>
     <string name="reset_filters">Filter zurücksetzen</string>

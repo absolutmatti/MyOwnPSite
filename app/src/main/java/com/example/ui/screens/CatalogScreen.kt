@@ -53,7 +53,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.R
 import com.example.domain.model.AlphabetBucket
-import com.example.domain.model.CatalogFilter
 import com.example.domain.model.Performer
 import com.example.domain.model.SortOrder
 import com.example.ui.components.PerformerTileCard
@@ -77,8 +76,8 @@ fun CatalogScreen(
     uiState: VideothekUiState,
     onSelectPerformer: (Long) -> Unit,
     onPerformerFocused: (Long) -> Unit,
-    onToggleSortOrder: () -> Unit,
-    onSelectCatalogFilter: (CatalogFilter) -> Unit,
+    onCycleSortOrder: () -> Unit,
+    onSelectSortOrder: (SortOrder) -> Unit,
     onSelectAlphabetBucket: (AlphabetBucket) -> Unit,
     onToggleSearch: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -119,14 +118,13 @@ fun CatalogScreen(
             TvCatalogHeader(
                 visibleCount = readyState?.performers?.size ?: 0,
                 totalCount = readyState?.totalCount ?: 0,
-                withImageCount = readyState?.withImageCount ?: 0,
+                totalVideoLinks = readyState?.totalVideoLinks ?: 0,
                 sortOrder = uiState.sortOrder,
-                catalogFilter = uiState.catalogFilter,
                 alphabetBucket = uiState.alphabetBucket,
                 isSearchActive = uiState.isSearchActive,
                 searchQuery = uiState.searchQuery,
-                onToggleSortOrder = onToggleSortOrder,
-                onSelectCatalogFilter = onSelectCatalogFilter,
+                onCycleSortOrder = onCycleSortOrder,
+                onSelectSortOrder = onSelectSortOrder,
                 onSelectAlphabetBucket = onSelectAlphabetBucket,
                 onToggleSearch = onToggleSearch,
                 onSearchQueryChange = onSearchQueryChange,
@@ -273,6 +271,10 @@ private fun FocusStatusFooter(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (focusedPerformer != null) {
+            val linkText = if (focusedPerformer.videoCount == 1) "1 Video-Link"
+            else "${focusedPerformer.videoCount} Video-Links"
+            val imageText = if (focusedPerformer.hasImage) "9:16-Bild aktiv" else "Leere 9:16-Kachel"
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -283,18 +285,14 @@ private fun FocusStatusFooter(
                     color = CinemaAmberLight,
                 )
                 Text(
-                    text = if (focusedPerformer.hasImage) {
-                        "• 9:16-Bild aktiv • OK für Details"
-                    } else {
-                        "• Leere 9:16-Kachel • OK drücken, um Bild hinzuzufügen"
-                    },
+                    text = "• $linkText • $imageText • OK für Details",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
             }
         } else {
             Text(
-                text = "D-Pad zum Navigieren • OK auf Kachel drücken, um 9:16-Bild hinzuzufügen",
+                text = "D-Pad zum Navigieren • OK auf Kachel drücken für Bild & Video-Links",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
             )

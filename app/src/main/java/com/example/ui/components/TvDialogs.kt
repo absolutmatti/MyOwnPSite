@@ -92,46 +92,16 @@ fun TvTextInputDialog(
                 color = TextPrimary,
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TextSecondary,
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(CardSurfaceElevated)
-                        .border(
-                            width = if (inputFocused) 2.dp else 1.dp,
-                            color = if (inputFocused) CinemaGold else BorderSubtle,
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                ) {
-                    if (textValue.isEmpty()) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextMuted,
-                        )
-                    }
-                    BasicTextField(
-                        value = textValue,
-                        onValueChange = { textValue = it },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
-                        cursorBrush = SolidColor(CinemaGold),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(inputFocusRequester)
-                            .onFocusChanged { inputFocused = it.isFocused }
-                            .testTag("dialog_text_input"),
-                    )
-                }
-            }
+            DialogTextInputField(
+                label = label,
+                value = textValue,
+                onValueChange = { textValue = it },
+                isFocused = inputFocused,
+                onFocusChange = { inputFocused = it },
+                modifier = Modifier
+                    .focusRequester(inputFocusRequester)
+                    .testTag("dialog_text_input"),
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -173,6 +143,164 @@ fun TvTextInputDialog(
                     Text(text = confirmText)
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvVideoLinkDialog(
+    title: String,
+    initialTitle: String,
+    initialUrl: String,
+    confirmText: String,
+    onConfirm: (title: String, url: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+
+    var titleValue by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var urlValue by remember(initialUrl) { mutableStateOf(initialUrl) }
+    var titleFocused by remember { mutableStateOf(false) }
+    var urlFocused by remember { mutableStateOf(false) }
+    val urlFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        urlFocusRequester.requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ScrimDark),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 580.dp)
+                .fillMaxWidth()
+                .padding(24.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(CardSurface)
+                .border(1.5.dp, BorderSubtle, RoundedCornerShape(20.dp))
+                .padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = TextPrimary,
+            )
+
+            DialogTextInputField(
+                label = stringResource(R.string.dialog_video_url_label),
+                value = urlValue,
+                onValueChange = { urlValue = it },
+                isFocused = urlFocused,
+                onFocusChange = { urlFocused = it },
+                modifier = Modifier
+                    .focusRequester(urlFocusRequester)
+                    .testTag("dialog_video_url_input"),
+            )
+
+            DialogTextInputField(
+                label = stringResource(R.string.dialog_video_title_label),
+                value = titleValue,
+                onValueChange = { titleValue = it },
+                isFocused = titleFocused,
+                onFocusChange = { titleFocused = it },
+                modifier = Modifier.testTag("dialog_video_title_input"),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag("dialog_cancel_button"),
+                    colors = ButtonDefaults.colors(
+                        containerColor = CardSurfaceElevated,
+                        contentColor = TextPrimary,
+                        focusedContainerColor = CinemaGold,
+                        focusedContentColor = ObsidianBackground,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                ) {
+                    Text(text = stringResource(R.string.dialog_cancel))
+                }
+
+                Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+
+                Button(
+                    onClick = {
+                        val trimmedUrl = urlValue.trim()
+                        if (trimmedUrl.isNotEmpty()) {
+                            onConfirm(titleValue.trim(), trimmedUrl)
+                        }
+                    },
+                    modifier = Modifier.testTag("dialog_confirm_button"),
+                    colors = ButtonDefaults.colors(
+                        containerColor = CinemaGold,
+                        contentColor = ObsidianBackground,
+                        focusedContainerColor = TextPrimary,
+                        focusedContentColor = ObsidianBackground,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp),
+                ) {
+                    Text(text = confirmText)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DialogTextInputField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    isFocused: Boolean,
+    onFocusChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = TextSecondary,
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(CardSurfaceElevated)
+                .border(
+                    width = if (isFocused) 2.dp else 1.dp,
+                    color = if (isFocused) CinemaGold else BorderSubtle,
+                    shape = RoundedCornerShape(12.dp),
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextMuted,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
+                cursorBrush = SolidColor(CinemaGold),
+                modifier = modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { onFocusChange(it.isFocused) },
+            )
         }
     }
 }

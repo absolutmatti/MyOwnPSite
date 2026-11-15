@@ -17,11 +17,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -180,7 +181,7 @@ fun PerformerPortraitFrame(
             )
         }
 
-        // Top badges: aspect ratio tag (when empty) & favorite star
+        // Top badges: aspect ratio tag (when empty) & video links counter
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -214,20 +215,33 @@ fun PerformerPortraitFrame(
                 Spacer(modifier = Modifier.size(1.dp))
             }
 
-            if (performer.isFavorite) {
-                Box(
+            if (performer.videoCount > 0) {
+                Row(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(ObsidianBackground.copy(alpha = 0.78f))
-                        .border(1.dp, CinemaGold.copy(alpha = 0.7f), CircleShape),
-                    contentAlignment = Alignment.Center,
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isFocused) CinemaGoldContainer.copy(alpha = 0.92f)
+                            else ObsidianBackground.copy(alpha = 0.78f)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = CinemaGold.copy(alpha = if (isFocused) 0.85f else 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = stringResource(R.string.filter_favorites),
+                        imageVector = Icons.Filled.VideoLibrary,
+                        contentDescription = null,
                         tint = CinemaGold,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = performer.videoCount.toString(),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = CinemaAmberLight,
                     )
                 }
             }

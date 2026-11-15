@@ -24,7 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,7 +51,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.R
 import com.example.domain.model.AlphabetBucket
-import com.example.domain.model.CatalogFilter
 import com.example.domain.model.SortOrder
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CardSurface
@@ -69,14 +68,13 @@ import com.example.ui.theme.TextSecondary
 fun TvCatalogHeader(
     visibleCount: Int,
     totalCount: Int,
-    withImageCount: Int,
+    totalVideoLinks: Int,
     sortOrder: SortOrder,
-    catalogFilter: CatalogFilter,
     alphabetBucket: AlphabetBucket,
     isSearchActive: Boolean,
     searchQuery: String,
-    onToggleSortOrder: () -> Unit,
-    onSelectCatalogFilter: (CatalogFilter) -> Unit,
+    onCycleSortOrder: () -> Unit,
+    onSelectSortOrder: (SortOrder) -> Unit,
     onSelectAlphabetBucket: (AlphabetBucket) -> Unit,
     onToggleSearch: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -110,7 +108,7 @@ fun TvCatalogHeader(
                         color = TextPrimary,
                     )
                     Text(
-                        text = "$visibleCount von $totalCount Darstellerinnen • $withImageCount mit Bild",
+                        text = "$visibleCount von $totalCount Darstellerinnen • $totalVideoLinks Video-Links",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                     )
@@ -122,7 +120,7 @@ fun TvCatalogHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Button(
-                    onClick = onToggleSortOrder,
+                    onClick = onCycleSortOrder,
                     modifier = Modifier.testTag("sort_toggle_button"),
                     colors = ButtonDefaults.colors(
                         containerColor = CardSurfaceElevated,
@@ -133,7 +131,7 @@ fun TvCatalogHeader(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.SortByAlpha,
+                        imageVector = Icons.Filled.SwapVert,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
@@ -196,43 +194,37 @@ fun TvCatalogHeader(
             )
         }
 
-        // Filter & Alphabet Jump Chips Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+        // Sort Options (Alphabet & Video Count) + Alphabet Jump Chips
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                items(CatalogFilter.entries) { filter ->
-                    TvSelectableChip(
-                        label = filter.label,
-                        selected = catalogFilter == filter,
-                        onClick = { onSelectCatalogFilter(filter) },
-                        testTag = "filter_chip_${filter.name.lowercase()}",
-                    )
-                }
+            items(SortOrder.entries) { order ->
+                TvSelectableChip(
+                    label = order.label,
+                    selected = sortOrder == order,
+                    onClick = { onSelectSortOrder(order) },
+                    testTag = "sort_chip_${order.name.lowercase()}",
+                )
+            }
 
-                item {
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .width(1.dp)
-                            .height(22.dp)
-                            .background(BorderSubtle),
-                    )
-                }
+            item {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(BorderSubtle),
+                )
+            }
 
-                items(AlphabetBucket.entries) { bucket ->
-                    TvSelectableChip(
-                        label = if (bucket == AlphabetBucket.ALL) "A–Z Alle" else bucket.label,
-                        selected = alphabetBucket == bucket,
-                        onClick = { onSelectAlphabetBucket(bucket) },
-                        testTag = "alphabet_chip_${bucket.name.lowercase()}",
-                    )
-                }
+            items(AlphabetBucket.entries) { bucket ->
+                TvSelectableChip(
+                    label = if (bucket == AlphabetBucket.ALL) "Alle" else bucket.label,
+                    selected = alphabetBucket == bucket,
+                    onClick = { onSelectAlphabetBucket(bucket) },
+                    testTag = "alphabet_chip_${bucket.name.lowercase()}",
+                )
             }
         }
     }
